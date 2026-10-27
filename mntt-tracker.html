@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MNTT Lagos – Monday Night Table Tennis</title>
+<style>
+:root{--bg:#f6f4ef;--card:#fff;--ink:#1d1d1b;--mut:#6d6b64;--acc:#e8590c;--ok:#2b8a3e;--bad:#c92a2a;--line:#e3e0d8;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161615;--card:#222220;--ink:#f1efe8;--mut:#a09d93;--line:#37352f;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:720px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:0}h2{font-size:17px;margin:0 0 10px}
+.sub{color:var(--mut);font-size:14px;margin:2px 0 14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+input,button{font:inherit}
+input[type=text],input[type=number]{padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+button{border:0;border-radius:10px;padding:10px 14px;background:var(--acc);color:#fff;font-weight:600;cursor:pointer}
+button.g{background:transparent;color:var(--mut);border:1px solid var(--line)}
+button:disabled{opacity:.4}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:4px 6px 4px 12px;display:flex;gap:6px;align-items:center}
+.chip b{cursor:pointer;color:var(--mut);padding:0 6px}
+.table{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pl{border-radius:14px;padding:16px 8px;text-align:center;background:var(--acc);color:#fff;font-weight:700;border:0}
+.pl small{display:block;font-weight:500;opacity:.9;margin-top:4px}
+.pl .n{font-size:20px;overflow-wrap:anywhere}.pl .s{font-size:38px;line-height:1.1;margin-top:4px}
+.pl.b{background:#1c7ed6}
+.q{display:flex;flex-wrap:wrap;gap:6px}.q span{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:4px 10px;font-size:14px}
+table{width:100%;border-collapse:collapse}td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}th{color:var(--mut);font-size:13px;font-weight:600}
+td:last-child,th:last-child{text-align:right}
+.out{color:var(--bad)}.warn{color:var(--bad);font-size:14px;margin:8px 0}
+.champ{text-align:center;font-size:26px;font-weight:800;margin:6px 0}
+</style>
+</head>
+<body>
+<main>
+<h1>🏓 MNTT Lagos</h1>
+<p class="sub">Monday night table tennis · La Taverna Lagos</p>
+<div id="app"></div>
+</main>
+<script>
+const KEY='mntt-state-v1';
+const fresh=()=>({phase:'setup',players:[],round:1,queue:[],scores:{},target:11,nextTarget:11,champion:null,cutN:0,sel:{},rank:[],history:[],undo:[]});
+let S=fresh();
+try{const r=localStorage.getItem(KEY);if(r)S=Object.assign(fresh(),JSON.parse(r));}catch(e){}
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}render();}
+function snap(){const{undo,...rest}=S;S.undo.push(JSON.stringify(rest));if(S.undo.length>60)S.undo.shift();}
+function undo(){if(!S.undo.length)return;const u=S.undo;const prev=JSON.parse(u.pop());S=Object.assign(fresh(),prev,{undo:u});save();}
+
+function addPlayer(){const i=$('nm');const n=i.value.trim();if(!n)return;
+ if(S.players.some(p=>p.toLowerCase()===n.toLowerCase())){i.value='';return;}
+ S.players.push(n);i.value='';save();$('nm').focus();}
+function rmPlayer(i){S.players.splice(i,1);save();}
+function shuffle(){for(let i=S.players.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[S.players[i],S.players[j]]=[S.players[j],S.players[i]];}save();}
+function startRound(names,target){S.queue=names.slice();S.scores={};names.forEach(n=>S.scores[n]=0);S.target=target;S.phase='play';S.undo=[];}
+function start(){if(S.players.length<2)return;S.history=[];S.round=1;S.target=+$('tg').value||11;startRound(S.players,S.target);save();}
+function point(idx){snap();const[a,b]=S.queue;const w=idx?b:a,l=idx?a:b;S.scores[w]++;
+ S.queue=[w,...S.queue.slice(2),l];
+ if(S.scores[w]>=S.target)endRound(w);save();}
+function endRound(w){const names=Object.keys(S.scores);
+ const rank=names.map(n=>({n,s:S.scores[n]})).sort((a,b)=>b.s-a.s);
+ S.rank=rank;
+ if(names.length===2){S.champion=w;S.history.push({round:S.round,final:true,rank:rank.map((r,i)=>({...r,out:i>0}))});S.phase='done';return;}
+ S.cutN=Math.min(Math.floor(names.length/2),names.length-2);setSel();S.phase='cut';}
+function setSel(){S.sel={};S.rank.forEach((r,i)=>{S.sel[r.n]=i>=S.rank.length-S.cutN;});}
+function setCut(v){const max=S.rank.length-2;S.cutN=Math.max(0,Math.min(max,+v||0));setSel();save();}
+function toggle(i){const n=S.rank[i].n;S.sel[n]=!S.sel[n];S.cutN=Object.values(S.sel).filter(Boolean).length;save();}
+function confirmCut(){const keep=S.rank.filter(r=>!S.sel[r.n]).map(r=>r.n);if(keep.length<2)return;
+ S.history.push({round:S.round,rank:S.rank.map(r=>({...r,out:!!S.sel[r.n]}))});
+ S.round++;const t=+$('nt').value||11;
+ startRound(keep,t);save();}
+function reset(){if(confirm('Start a new night? This clears everything.')){S=fresh();save();}}
+
+function board(){const r=Object.keys(S.scores).map(n=>({n,s:S.scores[n]})).sort((a,b)=>b.s-a.s);
+ return '<table><tr><th>#</th><th>Player</th><th>Pts</th></tr>'+r.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.n)}</td><td>${x.s}</td></tr>`).join('')+'</table>';}
+
+function render(){const A=$('app');
+ if(S.phase==='setup'){
+  A.innerHTML=`<div class="card"><h2>Who’s playing tonight?</h2>
+  <div class="row"><input type="text" id="nm" placeholder="Player name" style="flex:1;min-width:140px" autocomplete="off"><button onclick="addPlayer()">Add</button></div>
+  <div class="chips">${S.players.map((p,i)=>`<span class="chip">${esc(p)}<b onclick="rmPlayer(${i})">✕</b></span>`).join('')}</div>
+  <p class="sub" style="margin-top:10px">${S.players.length} player${S.players.length==1?'':'s'}</p>
+  <div class="row"><label>First to <input type="number" id="tg" value="${S.target}" min="1" style="width:70px"> points</label>
+  <button class="g" onclick="shuffle()" ${S.players.length<2?'disabled':''}>Shuffle order</button>
+  <button onclick="start()" ${S.players.length<2?'disabled':''}>Start round 1</button></div></div>`;
+  const i=$('nm');i.addEventListener('keydown',e=>{if(e.key==='Enter')addPlayer();});return;}
+ const head=`<p class="sub">Round ${S.round} · ${Object.keys(S.scores).length} players${S.phase==='play'?' · first to '+S.target:''}</p>`;
+ if(S.phase==='play'){const[a,b]=S.queue;
+  A.innerHTML=head+`<div class="card"><div class="table">
+  <button class="pl" onclick="point(0)"><span class="n">${esc(a)}</span><div class="s">${S.scores[a]}</div><small>tap if they win the point</small></button>
+  <button class="pl b" onclick="point(1)"><span class="n">${esc(b)}</span><div class="s">${S.scores[b]}</div><small>tap if they win the point</small></button></div>
+  <div class="row" style="margin-top:10px"><button class="g" onclick="undo()" ${S.undo.length?'':'disabled'}>↩ Undo last point</button><button class="g" onclick="reset()">New night</button></div></div>
+  <div class="card"><h2>Up next</h2><div class="q">${S.queue.slice(2).map((n,i)=>`<span>${i+1}. ${esc(n)}</span>`).join('')||'<span>nobody waiting</span>'}</div></div>
+  <div class="card"><h2>Round standings</h2>${board()}</div>`;return;}
+ if(S.phase==='cut'){const keep=S.rank.filter(r=>!S.sel[r.n]).length;
+  const line=S.rank.length-S.cutN;const tie=S.cutN>0&&S.rank[line-1]&&S.rank[line]&&S.rank[line-1].s===S.rank[line].s;
+  A.innerHTML=head+`<div class="card"><h2>Round ${S.round} finished – who goes out?</h2>
+  <div class="row"><label>Cut bottom <input type="number" min="0" max="${S.rank.length-2}" value="${S.cutN}" style="width:70px" onchange="setCut(this.value)"></label><span class="sub" style="margin:0">${keep} go through</span></div>
+  ${tie?'<p class="warn">⚠ Tie at the cut line – tap names to decide who stays.</p>':''}
+  <table><tr><th>#</th><th>Player</th><th>Pts</th><th>Out?</th></tr>${S.rank.map((r,i)=>`<tr class="${S.sel[r.n]?'out':''}"><td>${i+1}</td><td>${esc(r.n)}</td><td>${r.s}</td><td><input type="checkbox" ${S.sel[r.n]?'checked':''} onchange="toggle(${i})"></td></tr>`).join('')}</table>
+  <div class="row" style="margin-top:12px"><label>Next round: first to <input type="number" id="nt" value="${S.nextTarget}" min="1" style="width:70px"></label>
+  <button onclick="confirmCut()" ${keep<2?'disabled':''}>Start round ${S.round+1}</button></div>
+  <div class="row" style="margin-top:8px"><button class="g" onclick="undo()" ${S.undo.length?'':'disabled'}>↩ Undo last point</button></div></div>`;return;}
+ if(S.phase==='done'){
+  A.innerHTML=`<div class="card"><div class="sub" style="text-align:center">Champion</div><div class="champ">🏆 ${esc(S.champion)}</div>
+  <p class="sub" style="text-align:center">Final: ${S.rank.map(r=>esc(r.n)+' '+r.s).join(' – ')}</p>
+  <div class="row" style="justify-content:center"><button class="g" onclick="undo()" ${S.undo.length?'':'disabled'}>↩ Undo last point</button><button onclick="reset()">New night</button></div></div>
+  <div class="card"><h2>Night summary</h2>${S.history.map(h=>`<p style="margin:8px 0 2px"><b>${h.final?'Final':'Round '+h.round}</b></p><div class="q">${h.rank.map(r=>`<span class="${r.out?'out':''}">${esc(r.n)} ${r.s}${r.out?' ✕':''}</span>`).join('')}</div>`).join('')}</div>`;}
+}
+render();
+</script>
+</body>
+</html>
